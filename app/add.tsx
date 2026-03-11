@@ -1,5 +1,7 @@
+import { supabase } from "@/services/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
@@ -13,8 +15,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-// import { supabase } from "@/services/supabase";
 
 export default function Add() {
   const timeOptions = ["เช้า", "เย็น"];
@@ -47,8 +47,59 @@ export default function Add() {
       setBase64Image(result.assets[0].base64 || null);
     }
   };
-  const handleSave = () => {
-    // save data into supabase
+  const handleSave = async () => {
+    try {
+      let imageUrl = null;
+
+      if (image && base64Image) {
+        const fileName = `run_${Date.now()}.jpg`;
+
+        const byteCharacters = atob(base64Image);
+        const byteNumbers = new Array(byteCharacters.length);
+
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+
+        const byteArray = new Uint8Array(byteNumbers);
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("run_bk")
+          .upload(fileName, byteArray, {
+            contentType: "image/jpeg",
+          });
+
+        if (uploadError) {
+          console.error("Upload error:", uploadError);
+          return;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("run_bk")
+          .getPublicUrl(fileName);
+
+        imageUrl = publicUrlData.publicUrl;
+      }
+
+      const { data, error } = await supabase.from("runs").insert({
+        location,
+        distance,
+        time_of_day: selectedtimeOptions,
+        run_date: new Date().toISOString(),
+        image_url: imageUrl,
+      });
+
+      if (error) {
+        console.error("Error saving data:", error);
+      } else {
+        console.log("Data saved successfully:", data);
+        Alert.alert("บันทึกสำเร็จ");
+        // หลังจากบันทึกสําเร็จ หน้าจอจะกลับไปที่หน้าหลัก
+        router.replace("/run");
+      }
+    } catch (err) {
+      console.error("Unexpected error:", err);
+    }
   };
 
   return (
