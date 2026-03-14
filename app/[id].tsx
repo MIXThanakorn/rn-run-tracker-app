@@ -44,22 +44,31 @@ export default function Rundetail() {
 
   const handleUpdate = async () => {
     setUpdating(true);
+
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user.id;
+
+      if (!userId) {
+        Alert.alert("กรุณาเข้าสู่ระบบก่อน");
+        return;
+      }
+
       const { error } = await supabase
         .from("runs")
         .update({
           location,
-          distance,
+          distance: Number(distance),
           time_of_day: timeOfDay,
           image_url: imageUrl,
         })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("user_id", userId); // ⭐ ป้องกันแก้ข้อมูลคนอื่น
+
       if (error) {
         console.error("Error updating run:", error);
       } else {
-        console.log("Run updated successfully!");
         Alert.alert("อัพเดตสำเร็จ");
-        // หลังจากอัพเดตสําเร็จ หน้าจอจะกลับไปที่หน้าหลัก
         router.replace("/run");
       }
     } catch (error) {
@@ -70,8 +79,6 @@ export default function Rundetail() {
   };
 
   const handleDelete = async () => {
-    // ส่วนลบข้อมูล
-    // แสดงการยืนยันก่อนลบ
     Alert.alert("ยืนยันการลบ", "คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลนี้?", [
       { text: "ยกเลิก", style: "cancel" },
       {
@@ -85,22 +92,36 @@ export default function Rundetail() {
   };
 
   const handleDeleteRun = async () => {
-    // ลบข้อมูลที่มี id ที่ระบุ
     try {
-      const { error } = await supabase.from("runs").delete().eq("id", id);
-      //ลบรูปภาพจาก storage ด้วย
+      // ดึง user ที่ login
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user.id;
+
+      if (!userId) {
+        Alert.alert("กรุณาเข้าสู่ระบบก่อน");
+        return;
+      }
+
+      // ลบเฉพาะข้อมูลของ user นี้
+      const { error } = await supabase
+        .from("runs")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+
+      if (error) {
+        console.error("Error deleting run:", error);
+        return;
+      }
+
+      // ลบรูปจาก storage
       if (imageUrl) {
         const fileName = imageUrl.split("/").pop() || "";
         await supabase.storage.from("run_bk").remove([fileName]);
       }
-      if (error) {
-        console.error("Error deleting run:", error);
-      } else {
-        console.log("Run deleted successfully!");
-        Alert.alert("ลบสำเร็จ");
-        // หลังจากลบสําเร็จ หน้าจอจะกลับไปที่หน้าหลัก
-        router.replace("/run");
-      }
+
+      Alert.alert("ลบสำเร็จ");
+      router.replace("/run");
     } catch (error) {
       console.error("Error deleting run:", error);
     }

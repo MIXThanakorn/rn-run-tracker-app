@@ -1,3 +1,4 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/services/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -12,16 +13,20 @@ import {
 } from "react-native";
 
 import { RunType } from "@/types/runtype";
+
 export default function Run() {
   const [RunData, setRunData] = useState<RunType[]>([]);
-  //ส่วนแสดงข้อมูลการวิ่งทั้งหมด
+  const { user } = useAuth();
+
   const fetchRuns = async () => {
-    const { data, error } = await supabase.from("runs").select("*");
-    if (error) {
-      console.error("Error fetching runs:", error);
-    } else {
-      setRunData(data as RunType[]);
-    }
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("runs")
+      .select("*")
+      .eq("user_id", user.id);
+
+    if (data) setRunData(data);
   };
 
   useFocusEffect(
@@ -38,12 +43,15 @@ export default function Run() {
     >
       <View style={styles.cardContent}>
         <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+
         <View style={styles.distanceBadge}>
           <Text style={styles.locationText}>{item.location}</Text>
+
           <Text style={styles.dateText}>
             {(() => {
               const date = new Date(item.run_date);
               const buddhistYear = "พ.ศ. " + (date.getFullYear() + 543);
+
               return (
                 new Intl.DateTimeFormat("th-TH", {
                   month: "long",
@@ -55,6 +63,7 @@ export default function Run() {
             })()}
           </Text>
         </View>
+
         <Text style={styles.distanceText}>{item.distance} km</Text>
       </View>
 
@@ -68,6 +77,7 @@ export default function Run() {
         source={require("@/assets/images/runimg.png")}
         style={styles.imglogo}
       />
+
       <FlatList
         data={RunData}
         renderItem={renderItem}

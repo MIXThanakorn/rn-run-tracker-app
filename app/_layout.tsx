@@ -1,3 +1,4 @@
+import { AuthProvider } from "@/contexts/AuthContext";
 import {
   Kanit_400Regular,
   Kanit_700Bold,
@@ -22,25 +23,28 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: "#00ff62",
-        },
-        headerTintColor: "#fff",
-        headerBackButtonDisplayMode: "minimal",
-        headerTitleAlign: "center",
-        headerTitleStyle: {
-          fontFamily: "Kanit_700Bold",
-          fontSize: 20,
-          color: "#fff",
-        },
-      }}
-    >
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="add" options={{ title: "Add Run" }} />
-      <Stack.Screen name="[id]" options={{ title: "Run Details" }} />
-      <Stack.Screen name="run" options={{ title: "Run Tracker" }} />
-    </Stack>
+    <AuthProvider>
+      <Stack
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: "#00ff62",
+          },
+          headerTintColor: "#fff",
+          headerBackButtonDisplayMode: "minimal",
+          headerTitleAlign: "center",
+          headerTitleStyle: {
+            fontFamily: "Kanit_700Bold",
+            fontSize: 20,
+            color: "#fff",
+          },
+        }}
+      >
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="add" options={{ title: "Add Run" }} />
+        <Stack.Screen name="[id]" options={{ title: "Run Details" }} />
+        <Stack.Screen name="run" options={{ title: "Run Tracker" }} />
+      </Stack>
+    </AuthProvider>
   );
 }
