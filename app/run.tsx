@@ -1,7 +1,6 @@
-import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/services/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   FlatList,
@@ -13,27 +12,46 @@ import {
 } from "react-native";
 
 import { RunType } from "@/types/runtype";
-
 export default function Run() {
+  const { uid } = useLocalSearchParams();
   const [RunData, setRunData] = useState<RunType[]>([]);
-  const { user } = useAuth();
+  //ส่วนแสดงข้อมูลการวิ่งทั้งหมด
 
   const fetchRuns = async () => {
-    if (!user) return;
+    if (!uid) return;
 
     const { data, error } = await supabase
       .from("runs")
       .select("*")
-      .eq("user_id", user.id);
+      .eq("user_id", uid);
 
-    if (data) setRunData(data);
+    if (error) {
+      console.error("Error fetching runs:", error);
+    } else {
+      setRunData(data as RunType[]);
+    }
   };
 
   useFocusEffect(
     useCallback(() => {
-      fetchRuns();
-    }, []),
+      if (uid) {
+        fetchRuns();
+      }
+    }, [uid]),
   );
+
+  const handleAddRun = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      router.push({
+        pathname: "/add",
+        params: { uid: user.id },
+      });
+    }
+  };
 
   const renderItem = ({ item }: { item: RunType }) => (
     <TouchableOpacity
@@ -43,15 +61,12 @@ export default function Run() {
     >
       <View style={styles.cardContent}>
         <Image source={{ uri: item.image_url }} style={styles.cardImage} />
-
         <View style={styles.distanceBadge}>
           <Text style={styles.locationText}>{item.location}</Text>
-
           <Text style={styles.dateText}>
             {(() => {
               const date = new Date(item.run_date);
               const buddhistYear = "พ.ศ. " + (date.getFullYear() + 543);
-
               return (
                 new Intl.DateTimeFormat("th-TH", {
                   month: "long",
@@ -63,7 +78,6 @@ export default function Run() {
             })()}
           </Text>
         </View>
-
         <Text style={styles.distanceText}>{item.distance} km</Text>
       </View>
 
@@ -77,17 +91,13 @@ export default function Run() {
         source={require("@/assets/images/runimg.png")}
         style={styles.imglogo}
       />
-
       <FlatList
         data={RunData}
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
       />
 
-      <TouchableOpacity
-        style={styles.floatingBtn}
-        onPress={() => router.push("/add")}
-      >
+      <TouchableOpacity style={styles.floatingBtn} onPress={handleAddRun}>
         <Ionicons name="add" size={30} color="#fff" />
       </TouchableOpacity>
     </View>

@@ -1,8 +1,7 @@
-import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/services/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
@@ -18,6 +17,7 @@ import {
 } from "react-native";
 
 export default function Add() {
+  const { uid } = useLocalSearchParams();
   const timeOptions = ["เช้า", "เย็น"];
   const [selectedtimeOptions, setSelectedtimeOptions] = useState<string | null>(
     null,
@@ -26,7 +26,6 @@ export default function Add() {
   const [distance, setDistance] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [base64Image, setBase64Image] = useState<string | null>(null);
-  const { user } = useAuth();
   const handleopenCamera = async () => {
     //ขออนุญาตเข้าถึงกล้อง
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -49,18 +48,10 @@ export default function Add() {
       setBase64Image(result.assets[0].base64 || null);
     }
   };
-
   const handleSave = async () => {
     try {
-      if (!user) {
-        Alert.alert("กรุณาเข้าสู่ระบบก่อน");
-        return;
-      }
-
-      const userId = user.id;
       let imageUrl = null;
 
-      // upload รูป
       if (image && base64Image) {
         const fileName = `run_${Date.now()}.jpg`;
 
@@ -73,7 +64,7 @@ export default function Add() {
 
         const byteArray = new Uint8Array(byteNumbers);
 
-        const { error: uploadError } = await supabase.storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
           .from("run_bk")
           .upload(fileName, byteArray, {
             contentType: "image/jpeg",
@@ -81,35 +72,35 @@ export default function Add() {
 
         if (uploadError) {
           console.error("Upload error:", uploadError);
-          Alert.alert("อัปโหลดรูปไม่สำเร็จ");
           return;
         }
 
-        const { data } = supabase.storage.from("run_bk").getPublicUrl(fileName);
+        const { data: publicUrlData } = supabase.storage
+          .from("run_bk")
+          .getPublicUrl(fileName);
 
-        imageUrl = data.publicUrl;
+        imageUrl = publicUrlData.publicUrl;
       }
 
-      // insert run
-      const { error } = await supabase.from("runs").insert({
-        user_id: userId,
+      const { data, error } = await supabase.from("runs").insert({
         location,
-        distance: Number(distance),
+        distance,
         time_of_day: selectedtimeOptions,
         run_date: new Date().toISOString(),
         image_url: imageUrl,
+        user_id: uid as string,
       });
 
       if (error) {
-        console.error("Insert error:", error);
-        Alert.alert("บันทึกไม่สำเร็จ");
-        return;
+        console.error("Error saving data:", error);
+      } else {
+        console.log("Data saved successfully:", data);
+        Alert.alert("บันทึกสำเร็จ");
+        // หลังจากบันทึกสําเร็จ หน้าจอจะกลับไปที่หน้าหลัก
+        router.replace("/run");
       }
-
-      Alert.alert("บันทึกสำเร็จ");
-      router.replace("/run");
     } catch (err) {
-      console.error("Save error:", err);
+      console.error("Unexpected error:", err);
     }
   };
 

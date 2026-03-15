@@ -1,5 +1,6 @@
 import { supabase } from "@/services/supabase";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -15,12 +16,35 @@ import {
 } from "react-native";
 export default function Rundetail() {
   const { id } = useLocalSearchParams();
+  const [image, setImage] = useState<string | null>(null);
+  const [base64Image, setBase64Image] = useState<string | null>(null);
 
   const [location, setLocation] = useState("");
   const [distance, setDistance] = useState("");
   const [timeOfDay, setTimeOfDay] = useState<string | null>(null);
   const [imageUrl, setImage_url] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+
+  const handleopenCamera = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (status !== "granted") {
+      Alert.alert("ขออนุญาตเข้าถึงกล้องเพื่อถ่ายภาพหน่อยนะคร๊าบบบบบ");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.5,
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+      setBase64Image(result.assets[0].base64 || null);
+    }
+  };
 
   useEffect(() => {
     FetchRun();
@@ -46,39 +70,71 @@ export default function Rundetail() {
     setUpdating(true);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData.session?.user.id;
+      let newImageUrl = imageUrl;
 
-      if (!userId) {
-        Alert.alert("กรุณาเข้าสู่ระบบก่อน");
-        return;
+      if (image && base64Image) {
+        // ลบรูปเก่า
+        if (imageUrl) {
+          const oldFile = imageUrl.split("/").pop() || "";
+          await supabase.storage.from("run_bk").remove([oldFile]);
+        }
+
+        // แปลง base64
+        const fileName = `run_${Date.now()}.jpg`;
+
+        const byteCharacters = atob(base64Image);
+        const byteNumbers = new Array(byteCharacters.length);
+
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+
+        const byteArray = new Uint8Array(byteNumbers);
+
+        // upload
+        const { error: uploadError } = await supabase.storage
+          .from("run_bk")
+          .upload(fileName, byteArray, {
+            contentType: "image/jpeg",
+          });
+
+        if (uploadError) {
+          console.error(uploadError);
+          return;
+        }
+
+        // get public url
+        const { data } = supabase.storage.from("run_bk").getPublicUrl(fileName);
+
+        newImageUrl = data.publicUrl;
       }
 
       const { error } = await supabase
         .from("runs")
         .update({
           location,
-          distance: Number(distance),
+          distance,
           time_of_day: timeOfDay,
-          image_url: imageUrl,
+          image_url: newImageUrl,
         })
-        .eq("id", id)
-        .eq("user_id", userId); // ⭐ ป้องกันแก้ข้อมูลคนอื่น
+        .eq("id", id);
 
       if (error) {
         console.error("Error updating run:", error);
       } else {
         Alert.alert("อัพเดตสำเร็จ");
-        router.replace("/run");
+        router.back();
       }
     } catch (error) {
-      console.error("Error updating run:", error);
+      console.error(error);
     } finally {
       setUpdating(false);
     }
   };
 
   const handleDelete = async () => {
+    // ส่วนลบข้อมูล
+    // แสดงการยืนยันก่อนลบ
     Alert.alert("ยืนยันการลบ", "คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลนี้?", [
       { text: "ยกเลิก", style: "cancel" },
       {
@@ -92,36 +148,22 @@ export default function Rundetail() {
   };
 
   const handleDeleteRun = async () => {
+    // ลบข้อมูลที่มี id ที่ระบุ
     try {
-      // ดึง user ที่ login
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData.session?.user.id;
-
-      if (!userId) {
-        Alert.alert("กรุณาเข้าสู่ระบบก่อน");
-        return;
-      }
-
-      // ลบเฉพาะข้อมูลของ user นี้
-      const { error } = await supabase
-        .from("runs")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", userId);
-
-      if (error) {
-        console.error("Error deleting run:", error);
-        return;
-      }
-
-      // ลบรูปจาก storage
+      const { error } = await supabase.from("runs").delete().eq("id", id);
+      //ลบรูปภาพจาก storage ด้วย
       if (imageUrl) {
         const fileName = imageUrl.split("/").pop() || "";
         await supabase.storage.from("run_bk").remove([fileName]);
       }
-
-      Alert.alert("ลบสำเร็จ");
-      router.replace("/run");
+      if (error) {
+        console.error("Error deleting run:", error);
+      } else {
+        console.log("Run deleted successfully!");
+        Alert.alert("ลบสำเร็จ");
+        // หลังจากลบสําเร็จ หน้าจอจะกลับไปที่หน้าหลัก
+        router.back();
+      }
     } catch (error) {
       console.error("Error deleting run:", error);
     }
@@ -131,18 +173,18 @@ export default function Rundetail() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* ส่วนแสดงรูปภาพ */}
       <View style={styles.imageContainer}>
-        {imageUrl ? (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.mainImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.mainImage, styles.noImage]}>
-            <Ionicons name="image-outline" size={60} color="#DDD" />
-            <Text style={styles.noImageText}>ไม่มีรูปภาพประกอบ</Text>
-          </View>
-        )}
+        <TouchableOpacity onPress={handleopenCamera}>
+          {image ? (
+            <Image source={{ uri: image }} style={styles.mainImage} />
+          ) : imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.mainImage} />
+          ) : (
+            <View style={[styles.mainImage, styles.noImage]}>
+              <Ionicons name="camera-outline" size={60} color="#DDD" />
+              <Text style={styles.noImageText}>กดเพื่อถ่ายภาพ</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* ฟอร์มแก้ไขข้อมูล */}
